@@ -1,0 +1,8 @@
+node_modules/
+results/
+*.log
+.env
+schedule-config.json
+# Keep example config
+!schedule-config.example.json
+

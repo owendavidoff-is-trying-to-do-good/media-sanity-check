@@ -1,0 +1,27 @@
+{
+  "description": "Example configuration for autonomous scheduled content processing",
+  "tasks": [
+    {
+      "name": "Daily News Check",
+      "schedule": "0 9 * * *",
+      "description": "Process news URLs every day at 9:00 AM",
+      "urls": [
+        "https://example.com/article1",
+        "https://example.com/article2"
+      ]
+    },
+    {
+      "name": "RSS Feed Monitor",
+      "schedule": "0 */6 * * *",
+      "description": "Check RSS feed every 6 hours",
+      "rss": "https://example.com/feed.xml"
+    },
+    {
+      "name": "Weekly Batch",
+      "schedule": "0 0 * * 0",
+      "description": "Process URLs from file every Sunday at midnight",
+      "file": "weekly-urls.txt"
+    }
+  ]
+}
+
