@@ -6,6 +6,57 @@ const anthropic = new Anthropic({
   apiKey: config.anthropicApiKey
 });
 
+// Credit tracking
+// Claude 3.5 Sonnet pricing: $3/1M input tokens, $15/1M output tokens
+const PRICING = {
+  inputPerMillion: 3.0,
+  outputPerMillion: 15.0
+};
+
+let creditTracker = {
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+  totalCost: 0,
+  apiCalls: 0,
+  errors: 0
+};
+
+/**
+ * Estimate cost from token usage
+ * @param {number} inputTokens - Input tokens used
+ * @param {number} outputTokens - Output tokens used
+ * @returns {number} Estimated cost in USD
+ */
+function estimateCost(inputTokens, outputTokens) {
+  const inputCost = (inputTokens / 1_000_000) * PRICING.inputPerMillion;
+  const outputCost = (outputTokens / 1_000_000) * PRICING.outputPerMillion;
+  return inputCost + outputCost;
+}
+
+/**
+ * Get credit tracking statistics
+ * @returns {Object} Credit tracking stats
+ */
+function getCreditStats() {
+  return {
+    ...creditTracker,
+    estimatedCost: creditTracker.totalCost
+  };
+}
+
+/**
+ * Reset credit tracker
+ */
+function resetCreditTracker() {
+  creditTracker = {
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalCost: 0,
+    apiCalls: 0,
+    errors: 0
+  };
+}
+
 /**
  * Score content using RFC 2025 SICTP protocol
  * Returns scores for Cw (Content Worth), Sd (Source Dependability), and Dv (Diversity)
@@ -52,13 +103,22 @@ Respond in JSON format with the following structure:
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-3-sonnet-20240229',
       max_tokens: 1024,
       messages: [{
         role: 'user',
         content: prompt
       }]
     });
+
+    // Track credit usage
+    creditTracker.apiCalls++;
+    if (message.usage) {
+      creditTracker.totalInputTokens += message.usage.input_tokens;
+      creditTracker.totalOutputTokens += message.usage.output_tokens;
+      const callCost = estimateCost(message.usage.input_tokens, message.usage.output_tokens);
+      creditTracker.totalCost += callCost;
+    }
 
     // Extract JSON from response
     const responseText = message.content[0].text;
@@ -96,17 +156,32 @@ Respond in JSON format with the following structure:
       timestamp: new Date().toISOString()
     };
   } catch (error) {
+    creditTracker.errors++;
     console.error('Error scoring content:', error.message);
+    
+    // Check if it's a credit/authentication error
+    const isCreditError = error.message.includes('credit') || 
+                         error.message.includes('billing') ||
+                         error.message.includes('quota') ||
+                         error.message.includes('401') ||
+                         error.message.includes('403');
+    
     return {
       Cw: 0,
       Sd: 0,
       Dv: 0,
-      status: 'error',
+      status: isCreditError ? 'credit_exhausted' : 'error',
       reasoning: `API Error: ${error.message}`,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      creditExhausted: isCreditError
     };
   }
 }
 
-module.exports = { scoreContent };
+module.exports = { 
+  scoreContent, 
+  getCreditStats, 
+  resetCreditTracker,
+  estimateCost 
+};
 
